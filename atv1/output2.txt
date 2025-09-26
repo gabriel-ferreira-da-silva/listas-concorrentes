@@ -1,11 +1,36 @@
-2.030759ms
-2.31199ms
-2.011766ms
-2.372954ms
-2.24893ms
-2.176341ms
-1.956438ms
-2.029843ms
-2.370107ms
-2.481994ms
-2.340112ms
+num threads: 2
+Mean: 1.589999ms
+StdDev: 324.064µs
+num threads: 4
+Mean: 1.851635ms
+StdDev: 69.236µs
+num threads: 6
+Mean: 1.920084ms
+StdDev: 112.647µs
+num threads: 7
+Mean: 2.046823ms
+StdDev: 136.086µs
+num threads: 12
+Mean: 2.265723ms
+StdDev: 164.407µs
+num threads: 1
+Mean: 2.013639ms
+StdDev: 806.647µs
+num threads: 3
+Mean: 1.682515ms
+StdDev: 149.152µs
+num threads: 5
+Mean: 1.913041ms
+StdDev: 76.843µs
+num threads: 8
+Mean: 2.068806ms
+StdDev: 106.595µs
+num threads: 9
+Mean: 2.101468ms
+StdDev: 139.941µs
+num threads: 10
+Mean: 2.143138ms
+StdDev: 123.194µs
+num threads: 11
+Mean: 2.223326ms
+StdDev: 135.654µs

@@ -9,6 +9,14 @@ import (
 	"time"
 	"sync"
 	"log"
+	"myproject/plotcalc"
+
+	"image/color"
+	"sort"
+
+	"gonum.org/v1/plot"
+	"gonum.org/v1/plot/plotter"
+	"gonum.org/v1/plot/vg"
 )
 
 var (
@@ -64,69 +72,63 @@ func addFileToIndexer(filePath string) {
 	}
 }
 
+type BarError struct {
+	Xs, Ys, Errors []float64
+}
+
+func (b BarError) Len() int                 { return len(b.Xs) }
+func (b BarError) XY(i int) (x, y float64) { return b.Xs[i], b.Ys[i] }
+
+func (b BarError) YError(i int) (low, high float64) {
+	return b.Ys[i] - b.Errors[i], b.Ys[i] + b.Errors[i]
+}
+
+
 func main() {
-	numthreads := []int{2,3,4,5,6,7,8,9,10,11,12}
-	eval := map[int]time.Duration{}
-    var data []time.Duration
-	
+	numthreads := []int{1,2,3,4,5,6,7,8,9,10,11,12}
+	eval := map[int][]time.Duration{}
+    
 	for _, num:= range numthreads {
-		fileList = []string{}
-		indexador = make(map[string][]string)
-		fmt.Println("\n\n*****************************")
-		fmt.Printf("Running with %d threads\n", num)
-		
-		var wg sync.WaitGroup
+		var data []time.Duration
+	
+		for i:=0; i<50; i++{
 
-		now := time.Now()
-		addToFileList("exemplo")
-		elapsed := time.Since(now)
-		fmt.Printf("Time taken to file to build file list: %v\n", elapsed)
-
-		fmt.Println("Files found ", len(fileList))
-		fmt.Println("File List:", fileList)
-
-		workload := len(fileList) / num
-		loadlist := [][]string{}
-
-
-		for i := 0; i < num; i++ {
-			start := i * workload
-			end := start + workload
-			if(i==num-1){
-				end = len(fileList)
-			}
-			loadlist = append(loadlist, fileList[start:end])
-		}
-
-		now = time.Now()
-
-		for _, load :=range loadlist {
-			wg.Add(1)
-			go func(files []string) {
-				defer wg.Done()
-				for _, file := range files {
-					addFileToIndexer(file)
+			fileList = []string{}
+			indexador = make(map[string][]string)
+			
+			var wg sync.WaitGroup
+			now := time.Now()
+			addToFileList("exemplo")
+			elapsed := time.Since(now)
+			workload := len(fileList) / num
+			loadlist := [][]string{}
+			for i := 0; i < num; i++ {
+				start := i * workload
+				end := start + workload
+				if(i==num-1){
+					end = len(fileList)
 				}
-			}(load)
+				loadlist = append(loadlist, fileList[start:end])
+			}
+
+			now = time.Now()
+			for _, load :=range loadlist {
+				wg.Add(1)
+				go func(files []string) {
+					defer wg.Done()
+					for _, file := range files {
+						addFileToIndexer(file)
+					}
+				}(load)
+			}
+
+			wg.Wait()
+			elapsed = time.Since(now)
+			data = append(data, elapsed)
 		}
 
-		wg.Wait()
-		elapsed = time.Since(now)
-        data = append(data, elapsed)
-
-
-		fmt.Printf("Number of files indexed: %d\n", len(fileList))
-		fmt.Println("number of threads:", num)
-		fmt.Printf("Time taken to file to build indexer: %v\n", elapsed)
-		fmt.Println("*****************************\n\n")
-		eval[num] = elapsed
+		eval[num] = data
 	}
-
-	fmt.Println("\n\nEvaluation:")
-	for k, v := range eval {
-		fmt.Printf("Threads: %d -> Time: %v\n", k, v)
-	}
-
 
 
     f, err := os.Create("output2.txt")
@@ -136,11 +138,96 @@ func main() {
     defer f.Close()
 
     writer := bufio.NewWriter(f)
-    for _, d := range data {
-        _, err := writer.WriteString(fmt.Sprintf("%v\n", d))
+
+    for k, v := range eval {
+
+		mean := plotcalc.Mean(v)
+		stddev := plotcalc.StdDev(v)
+
+		_, err := writer.WriteString(fmt.Sprintf("num threads: %v\n", k))
+		_, err = writer.WriteString(fmt.Sprintf("Mean: %v\n", mean))
+		_, err = writer.WriteString(fmt.Sprintf("StdDev: %v\n", stddev))
+
         if err != nil {
             log.Fatal(err)
         }
     }
     writer.Flush()
+
+	keys := make([]int, 0, 1+len(eval))
+	for k := range eval {
+		keys = append(keys, k)
+	}
+
+	sort.Ints(keys)
+
+	values := make(plotter.Values, len(keys))
+	labels := make([]string, len(keys))
+	for i, k := range keys {
+		mean := plotcalc.Mean(eval[k]).Seconds() * 1000 // convert to ms
+		values[i] = mean
+		labels[i] = fmt.Sprintf("%d", k)
+	}
+
+	p := plot.New()
+	p.Title.Text = "Mean Indexing Time by Number of Threads"
+	p.Y.Label.Text = "Time (ms)"
+
+	bars, err := plotter.NewBarChart(values, vg.Points(20))
+	if err != nil {
+		log.Fatal(err)
+	}
+	bars.LineStyle.Width = vg.Length(0)
+	bars.Color = color.RGBA{R: 100, G: 150, B: 255, A: 255} // choose a color
+	p.Add(bars)
+
+	p.NominalX(labels...)
+
+	if err := p.Save(8*vg.Inch, 4*vg.Inch, "thread_means.png"); err != nil {
+		log.Fatal(err)
+	}
+
+	//values := make(plotter.Values, len(keys))
+	errs := make([]float64, len(keys))
+	xs := make([]float64, len(keys))
+	//labels := make([]string, len(keys))
+
+	for i, k := range keys {
+		mean := plotcalc.Mean(eval[k]).Seconds() * 1000 // ms
+		std := plotcalc.StdDev(eval[k]).Seconds() * 1000 // ms
+
+		values[i] = mean
+		errs[i] = std
+		xs[i] = float64(i)
+		labels[i] = fmt.Sprintf("%d", k)
+	}
+
+	p = plot.New()
+	p.Title.Text = "Mean Indexing Time by Number of Threads"
+	p.Y.Label.Text = "Time (ms)"
+
+	// Bars
+	bars, err = plotter.NewBarChart(values, vg.Points(20))
+	if err != nil {
+		log.Fatal(err)
+	}
+	bars.LineStyle.Width = vg.Length(0)
+	bars.Color = color.RGBA{R: 100, G: 150, B: 255, A: 255}
+	p.Add(bars)
+
+	// X-axis labels
+	p.NominalX(labels...)
+
+	// Error bars
+	eb, err := plotter.NewYErrorBars(BarError{Xs: xs, Ys: values, Errors: errs})
+	if err != nil {
+		log.Fatal(err)
+	}
+	p.Add(eb)
+
+	// Save
+	if err := p.Save(8*vg.Inch, 4*vg.Inch, "thread_means_stddev.png"); err != nil {
+		log.Fatal(err)
+	}
+
 }

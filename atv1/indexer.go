@@ -8,6 +8,7 @@ import (
     "strings"
 	"time"
 	"log"
+    "myproject/plotcalc"
 )
 
 type Indexador struct {
@@ -55,39 +56,50 @@ func addFileToIndexer(filePath string) {
 	}
 }
 
+
 func main() {
-    var data []time.Duration
+	var data []time.Duration
 
-    for i := 0; i < 5; i++ {
-	    fileList = []string{}
+	for i := 0; i < 50; i++ {
+		fileList = []string{}
 		indexador = make(map[string][]string)
-		
-        now := time.Now()
-        addToFileList("exemplo") // your function
-        fmt.Printf("Time taken to file to build file list: %v\n", time.Since(now))
-        fmt.Println("Files found ", len(fileList))
 
-        now = time.Now()
-        for _, file := range fileList {
-            addFileToIndexer(file) // your function
-        }
-        elapsed := time.Since(now)
-        data = append(data, elapsed)
-        fmt.Printf("Time taken to index files: %v\n", elapsed)
-    }
+		now := time.Now()
+		addToFileList("exemplo")
+		fmt.Printf("Time to build file list: %v (Files found %d)\n", time.Since(now), len(fileList))
 
-    f, err := os.Create("output.txt") // creates or truncates
-    if err != nil {
-        log.Fatal(err)
-    }
-    defer f.Close()
+		now = time.Now()
+		for _, file := range fileList {
+			addFileToIndexer(file)
+		}
+		elapsed := time.Since(now)
+		data = append(data, elapsed)
+		fmt.Printf("Time to index files: %v\n", elapsed)
+	}
 
-    writer := bufio.NewWriter(f)
-    for _, d := range data {
-        _, err := writer.WriteString(fmt.Sprintf("%v\n", d)) // convert duration to string
-        if err != nil {
-            log.Fatal(err)
-        }
-    }
-    writer.Flush()
+	// Write stats to file
+	f, err := os.Create("output.txt")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer f.Close()
+
+	writer := bufio.NewWriter(f)
+	mean := plotcalc.Mean(data)
+	stddev := plotcalc.StdDev(data)
+    
+    plotcalc.PlotDurations(data, "durations.png")
+
+	writer.WriteString(fmt.Sprintf("Mean: %v\n", mean))
+	writer.WriteString(fmt.Sprintf("Std Dev: %v\n", stddev))
+	writer.WriteString("Data:\n")
+	for _, d := range data {
+		writer.WriteString(fmt.Sprintf("%v\n", d))
+	}
+	writer.Flush()
+
+	// Plot graph
+	if err := plotcalc.PlotDurations(data, "durations.png"); err != nil {
+		log.Fatal(err)
+	}
 }
